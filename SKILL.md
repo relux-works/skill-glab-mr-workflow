@@ -1,9 +1,9 @@
 ---
-name: glab-mr-workflow
+name: skill-glab-mr-workflow
 description: Use when Codex needs to work with one or more self-hosted or cloud GitLab instances through local glab commands instead of MCP, including macOS Keychain auth, merge request URLs or repo/iid targets, MR creation, review reads, approvals, merges, pipeline status checks, failed job trace summaries, and manual CI job execution through the bundled gmr wrapper.
 ---
 
-# glab MR Workflow
+# skill-glab-mr-workflow
 
 ## Default Mode
 
