@@ -15,6 +15,9 @@ GitLab merge request workflow skill for Codex and Claude Code, built around loca
 
 - `SKILL.md`: skill instructions and workflow
 - `agents/openai.yaml`: UI metadata
+- `locales/metadata.json`: install-time localized metadata and trigger catalog
+- `setup.sh`: repo-level convenience wrapper around the bundled installer
+- `scripts/setup.sh`, `scripts/setup_main.py`, `scripts/setup_support.py`: vendored standalone skill install helper
 - `scripts/gmr`: high-level MR workflow wrapper
 - `scripts/bootstrap-glab-keychain.sh`: initial auth bootstrap
 - `scripts/ensure-glab-auth.sh`: auth preflight
@@ -23,12 +26,33 @@ GitLab merge request workflow skill for Codex and Claude Code, built around loca
 
 ## Install
 
-Symlink this repo into the skill directories used by your agent runtimes:
+Install the skill through the managed setup flow instead of symlinking the
+source checkout directly:
 
 ```bash
-ln -sfn /absolute/path/to/skill-glab-mr-workflow ~/.codex/skills/skill-glab-mr-workflow
-ln -sfn /absolute/path/to/skill-glab-mr-workflow ~/.claude/skills/skill-glab-mr-workflow
+./setup.sh global --locale ru-en
 ```
+
+This creates a managed runtime copy under
+`${XDG_DATA_HOME:-~/.local/share}/agents/skills/skill-glab-mr-workflow` and
+points `~/.claude/skills/skill-glab-mr-workflow` and
+`~/.codex/skills/skill-glab-mr-workflow` at that installed copy.
+
+On global installs, the shared helper also registers the skill triggers in
+`~/.agents/.instructions/INSTRUCTIONS_SKILL_TRIGGERS.md`.
+
+For a project-local install:
+
+```bash
+./setup.sh local /abs/path/to/repo --locale ru-en
+```
+
+This creates `<repo>/.skills/skill-glab-mr-workflow` and rewires the
+project-local `.claude/skills` and `.codex/skills` links to that copy.
+
+On local installs, the shared helper also provisions
+`.agents/.instructions/INSTRUCTIONS_TESTING.md` in the target repo and ensures
+the repo root `AGENTS.md` references it from the `Modules` section.
 
 ## Quick Start
 
@@ -42,6 +66,11 @@ scripts/gmr mr create --fill
 scripts/gmr mr approve https://gitlab.example.com/group/project/-/merge_requests/123
 scripts/gmr mr merge https://gitlab.example.com/group/project/-/merge_requests/123
 ```
+
+Localization is part of the shared install helper, not a separate repo-local
+install path. This repo only supplies locale data in `locales/metadata.json`;
+the helper renders the installed `SKILL.md` and `agents/openai.yaml` for the
+selected locale and keeps global/local infra wiring consistent.
 
 ## License
 
