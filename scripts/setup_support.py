@@ -2,13 +2,12 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Optional
 
 
 MANIFEST_FILENAME = ".skill-install.json"
@@ -25,25 +24,6 @@ REQUIRED_LOCALE_KEYS = (
 )
 OPENAI_YAML_FIELD_TEMPLATE = r"^(\s*{key}:\s*)(.*)$"
 FRONTMATTER_KEY_RE = re.compile(r"^(?P<key>[A-Za-z0-9_-]+):(.*)$")
-MARKDOWN_HEADING_RE = re.compile(r"^#{1,6}\s+.*$", re.MULTILINE)
-MODULES_HEADING_RE = re.compile(r"^(?P<level>#{1,6})\s+Modules\s*$", re.MULTILINE)
-SKILL_TRIGGERS_INCLUDE_NAME = "INSTRUCTIONS_SKILL_TRIGGERS.md"
-GLOBAL_AGENTS_ENTRYPOINT = Path(".agents") / ".instructions" / "AGENTS.md"
-GLOBAL_TRIGGER_INSTRUCTIONS = Path(".agents") / ".instructions" / SKILL_TRIGGERS_INCLUDE_NAME
-LOCAL_PROJECT_AGENTS_ENTRYPOINT = Path("AGENTS.md")
-LOCAL_PROJECT_TESTING_MODULE = Path(".agents") / ".instructions" / "INSTRUCTIONS_TESTING.md"
-LOCAL_PROJECT_TESTING_MODULE_REF = "@.agents/.instructions/INSTRUCTIONS_TESTING.md"
-MANAGED_TRIGGER_SECTION_START = "<!-- standalone-skill-install:managed-triggers:start -->"
-MANAGED_TRIGGER_SECTION_END = "<!-- standalone-skill-install:managed-triggers:end -->"
-MANAGED_TRIGGER_ENTRY_PREFIX = "<!-- standalone-skill-install:managed-trigger-entry "
-MANAGED_TRIGGER_ENTRY_SUFFIX = " -->"
-MANAGED_TRIGGER_SECTION_HEADING = "## Standalone Skills"
-MANAGED_TRIGGER_SECTION_DESCRIPTION = (
-    "Managed entries for standalone skills installed outside alexis-agents-infra."
-)
-MANAGED_TRIGGER_SECTION_PREFIX = (
-    f"{MANAGED_TRIGGER_SECTION_HEADING}\n\n{MANAGED_TRIGGER_SECTION_DESCRIPTION}\n\n"
-)
 CopyIgnore = shutil.ignore_patterns(
     ".git",
     ".venv",
@@ -51,6 +31,13 @@ CopyIgnore = shutil.ignore_patterns(
     ".DS_Store",
     "*.pyc",
     MANIFEST_FILENAME,
+)
+LOCAL_RUNTIME_PRUNE_PATHS = (
+    Path("README.md"),
+    CATALOG_RELATIVE_PATH,
+    Path("scripts") / "setup_main.py",
+    Path("scripts") / "setup_support.py",
+    Path("tests"),
 )
 
 
@@ -72,39 +59,7 @@ class InstallResult:
     source_dir: Path
     runtime_dir: Path
     install_root: Path
-    claude_link: Path
-    codex_link: Optional[Path]
     locale_mode: str
-
-
-@dataclass(frozen=True)
-class TriggerInstructionEntry:
-    skill_name: str
-    triggers: list[str]
-
-
-LOCAL_TESTING_INSTRUCTIONS_TEXT = """# Testing & Refactoring
-
-## Testing
-
-* Use **Swift Testing** framework, not XCTest.
-* Tests must be in **Swift**, not ObjC.
-
----
-
-## Refactoring workflow
-
-When refactoring (e.g., ObjC → Swift):
-
-1. **Write tests first** (if none exist).
-   * Test coverage must be **high for the code being refactored** (not the whole project):
-     * target **~80%+** at minimum;
-     * **prefer 100%** where practical.
-
-2. **Refactor code.**
-
-3. **Run tests** to verify nothing broke.
-"""
 
 
 def yaml_quote(value: str) -> str:
@@ -126,216 +81,6 @@ def unique_strings(values: list[str]) -> list[str]:
     return results
 
 
-def escape_markdown_table_cell(value: str) -> str:
-    return value.replace("|", r"\|").replace("\n", " ").strip()
-
-
-def default_trigger_instructions_document() -> str:
-    return (
-        "# Skill Triggers\n\n"
-        "Automatic skill activation rules. When these topics come up, load the matching skill first.\n"
-    )
-
-
-def render_trigger_instruction_row(entry: TriggerInstructionEntry) -> str:
-    trigger_cell = escape_markdown_table_cell(", ".join(entry.triggers))
-    skill_cell = f"`{entry.skill_name}`"
-    action_cell = f"Load `{entry.skill_name}` via Skill tool before proceeding."
-    return f"| {trigger_cell} | {skill_cell} | {action_cell} |\n"
-
-
-def render_managed_trigger_section(entries: list[TriggerInstructionEntry]) -> str:
-    lines = [
-        MANAGED_TRIGGER_SECTION_PREFIX,
-        f"{MANAGED_TRIGGER_SECTION_START}\n",
-    ]
-    for entry in sorted(entries, key=lambda item: item.skill_name.lower()):
-        lines.append(
-            f"{MANAGED_TRIGGER_ENTRY_PREFIX}"
-            f"{json.dumps({'skill_name': entry.skill_name, 'triggers': entry.triggers}, ensure_ascii=False)}"
-            f"{MANAGED_TRIGGER_ENTRY_SUFFIX}\n"
-        )
-    lines.extend(
-        [
-            "| Triggers | Skill | Action |\n",
-            "|----------|-------|--------|\n",
-        ]
-    )
-    for entry in sorted(entries, key=lambda item: item.skill_name.lower()):
-        lines.append(render_trigger_instruction_row(entry))
-    lines.append(f"{MANAGED_TRIGGER_SECTION_END}\n")
-    return "".join(lines)
-
-
-def parse_managed_trigger_section(text: str) -> list[TriggerInstructionEntry]:
-    start = text.find(MANAGED_TRIGGER_SECTION_START)
-    end = text.find(MANAGED_TRIGGER_SECTION_END)
-    if start == -1 or end == -1 or end < start:
-        return []
-
-    comment_entries: list[TriggerInstructionEntry] = []
-    table_entries: list[TriggerInstructionEntry] = []
-    body = text[start + len(MANAGED_TRIGGER_SECTION_START) : end]
-    for raw_line in body.splitlines():
-        line = raw_line.strip()
-        if line.startswith(MANAGED_TRIGGER_ENTRY_PREFIX) and line.endswith(MANAGED_TRIGGER_ENTRY_SUFFIX):
-            payload_text = line[len(MANAGED_TRIGGER_ENTRY_PREFIX) : -len(MANAGED_TRIGGER_ENTRY_SUFFIX)].strip()
-            try:
-                payload = json.loads(payload_text)
-            except json.JSONDecodeError:
-                continue
-            skill_name = payload.get("skill_name")
-            triggers = payload.get("triggers")
-            if not isinstance(skill_name, str) or not skill_name.strip():
-                continue
-            if not isinstance(triggers, list):
-                continue
-            normalized_triggers = unique_strings([item for item in triggers if isinstance(item, str)])
-            comment_entries.append(
-                TriggerInstructionEntry(
-                    skill_name=skill_name.strip(),
-                    triggers=normalized_triggers,
-                )
-            )
-            continue
-        if not line.startswith("|"):
-            continue
-        if line.startswith("| Triggers ") or line.startswith("|----------"):
-            continue
-        parts = [part.strip() for part in line.split("|")[1:-1]]
-        if len(parts) != 3:
-            continue
-        triggers_cell, skill_cell, _ = parts
-        skill_name = skill_cell.strip().strip("`")
-        if not skill_name:
-            continue
-        triggers = unique_strings(
-            [item.replace(r"\|", "|").strip() for item in triggers_cell.split(",")]
-        )
-        table_entries.append(TriggerInstructionEntry(skill_name=skill_name, triggers=triggers))
-    if comment_entries:
-        deduped: dict[str, TriggerInstructionEntry] = {}
-        for entry in comment_entries:
-            deduped[entry.skill_name] = entry
-        return list(deduped.values())
-    return table_entries
-
-
-def replace_or_append_managed_trigger_section(text: str, entries: list[TriggerInstructionEntry]) -> str:
-    section = render_managed_trigger_section(entries)
-    start = text.find(MANAGED_TRIGGER_SECTION_START)
-    end = text.find(MANAGED_TRIGGER_SECTION_END)
-    if start != -1 and end != -1 and end >= start:
-        replace_start = start
-        while text[:replace_start].endswith(MANAGED_TRIGGER_SECTION_PREFIX):
-            replace_start -= len(MANAGED_TRIGGER_SECTION_PREFIX)
-        end += len(MANAGED_TRIGGER_SECTION_END)
-        remainder = text[end:]
-        if remainder.startswith("\n"):
-            end += 1
-        return text[:replace_start] + section + text[end:]
-
-    if not text.strip():
-        return default_trigger_instructions_document() + "\n" + section
-    return text.rstrip() + "\n\n" + section
-
-
-def validate_global_agents_entrypoint(global_agents_path: Path) -> None:
-    try:
-        agents_text = global_agents_path.read_text(encoding="utf-8")
-    except FileNotFoundError as exc:
-        raise SetupError(
-            "Global agents instructions are missing. "
-            f"Expected {global_agents_path}. Run agents-infra setup global first."
-        ) from exc
-
-    for line in agents_text.splitlines():
-        stripped = line.strip()
-        if not stripped.startswith("@"):
-            continue
-        if Path(stripped[1:].strip()).name == SKILL_TRIGGERS_INCLUDE_NAME:
-            return
-
-    raise SetupError(
-        "Global AGENTS.md does not include the skill trigger module. "
-        f"Add a reference to {SKILL_TRIGGERS_INCLUDE_NAME} in {global_agents_path}."
-    )
-
-
-def register_global_skill_triggers(skill_name: str, triggers: list[str]) -> None:
-    global_agents_path = Path.home() / GLOBAL_AGENTS_ENTRYPOINT
-    trigger_instructions_path = Path.home() / GLOBAL_TRIGGER_INSTRUCTIONS
-    validate_global_agents_entrypoint(global_agents_path)
-
-    if trigger_instructions_path.exists():
-        text = trigger_instructions_path.read_text(encoding="utf-8")
-    else:
-        trigger_instructions_path.parent.mkdir(parents=True, exist_ok=True)
-        text = ""
-
-    existing_entries = {
-        entry.skill_name: entry for entry in parse_managed_trigger_section(text)
-    }
-    existing_entries[skill_name] = TriggerInstructionEntry(
-        skill_name=skill_name,
-        triggers=unique_strings(triggers),
-    )
-    updated = replace_or_append_managed_trigger_section(
-        text,
-        list(existing_entries.values()),
-    )
-    trigger_instructions_path.write_text(updated, encoding="utf-8")
-
-
-def ensure_local_testing_module(repo_root: Path) -> None:
-    module_path = repo_root / LOCAL_PROJECT_TESTING_MODULE
-    if module_path.exists():
-        if module_path.is_dir():
-            raise SetupError(f"Expected a file, found a directory: {module_path}")
-        return
-    module_path.parent.mkdir(parents=True, exist_ok=True)
-    module_path.write_text(LOCAL_TESTING_INSTRUCTIONS_TEXT, encoding="utf-8")
-
-
-def ensure_local_agents_modules_section(text: str, required_ref: str) -> str:
-    match = MODULES_HEADING_RE.search(text)
-    if match is None:
-        if not text.strip():
-            return f"## Modules\n\n{required_ref}\n"
-        return text.rstrip() + f"\n\n## Modules\n\n{required_ref}\n"
-
-    section_start = match.end()
-    next_heading = MARKDOWN_HEADING_RE.search(text, section_start)
-    section_end = next_heading.start() if next_heading else len(text)
-    section_body = text[section_start:section_end]
-    if required_ref in {line.strip() for line in section_body.splitlines()}:
-        return text
-
-    has_following_heading = next_heading is not None
-    trimmed_body = section_body.rstrip("\n")
-    suffix = "\n\n" if has_following_heading else "\n"
-    if trimmed_body.strip():
-        updated_body = f"{trimmed_body}\n{required_ref}{suffix}"
-    else:
-        updated_body = f"\n\n{required_ref}{suffix}"
-    return text[:section_start] + updated_body + text[section_end:]
-
-
-def ensure_local_agents_entrypoint(repo_root: Path) -> None:
-    agents_path = repo_root / LOCAL_PROJECT_AGENTS_ENTRYPOINT
-    if agents_path.exists() and agents_path.is_dir():
-        raise SetupError(f"Expected a file, found a directory: {agents_path}")
-
-    existing_text = ""
-    if agents_path.exists():
-        existing_text = agents_path.read_text(encoding="utf-8")
-    updated_text = ensure_local_agents_modules_section(
-        existing_text,
-        LOCAL_PROJECT_TESTING_MODULE_REF,
-    )
-    agents_path.write_text(updated_text, encoding="utf-8")
-
-
 def parse_locale_mode(value: str) -> LocaleSelection:
     normalized = value.strip().lower()
     if normalized not in SUPPORTED_LOCALE_MODES:
@@ -351,17 +96,6 @@ def parse_locale_mode(value: str) -> LocaleSelection:
         )
 
     return LocaleSelection(mode=normalized, primary_locale=normalized, secondary_locale=None)
-
-
-def skill_data_home() -> Path:
-    xdg_data_home = os.environ.get("XDG_DATA_HOME", "").strip()
-    if xdg_data_home:
-        return Path(xdg_data_home)
-    return Path.home() / ".local" / "share"
-
-
-def managed_global_install_dir(skill_name: str) -> Path:
-    return skill_data_home() / "agents" / "skills" / skill_name
 
 
 def install_manifest_path(skill_dir: Path) -> Path:
@@ -586,21 +320,18 @@ def sync_skill_copy(source_dir: Path, dest_dir: Path) -> None:
     shutil.copytree(source_dir, dest_dir, ignore=CopyIgnore)
 
 
-def ensure_skill_link(link_value: str, target_path: Path) -> None:
-    if target_path.is_symlink() or target_path.is_file():
-        target_path.unlink()
-    elif target_path.exists():
-        raise SetupError(f"Refusing to replace existing directory: {target_path}")
+def prune_local_runtime_copy(skill_dir: Path) -> None:
+    for relative_path in LOCAL_RUNTIME_PRUNE_PATHS:
+        target_path = skill_dir / relative_path
+        if target_path.is_symlink() or target_path.is_file():
+            target_path.unlink()
+            continue
+        if target_path.is_dir():
+            shutil.rmtree(target_path, ignore_errors=False)
 
-    target_path.parent.mkdir(parents=True, exist_ok=True)
-    os.symlink(link_value, target_path)
-
-
-def run_bootstrap(skill_dir: Path) -> None:
-    bootstrap_path = skill_dir / "scripts" / "bootstrap.sh"
-    if not bootstrap_path.exists():
-        return
-    subprocess.run([str(bootstrap_path), "--quiet"], check=True)
+    locales_dir = skill_dir / "locales"
+    if locales_dir.is_dir() and not any(locales_dir.iterdir()):
+        locales_dir.rmdir()
 
 
 def resolve_repo_root(path: Path) -> Path:
@@ -643,48 +374,30 @@ def perform_install(
     install_mode: str,
     requested_locale: Optional[str],
     repo_root: Optional[Path] = None,
-    bootstrap_runner: Callable[[Path], None] = run_bootstrap,
 ) -> InstallResult:
     source_dir = resolve_source_dir(source_dir).resolve()
     skill_name = source_dir.name
 
-    if install_mode == "global":
-        install_root = Path.home()
-        runtime_dir = managed_global_install_dir(skill_name)
-        claude_link_value = str(runtime_dir)
-        codex_link_value = str(runtime_dir)
-    elif install_mode == "local":
-        if repo_root is None:
-            raise SetupError("Local install requires a repository path.")
-        install_root = resolve_repo_root(repo_root)
-        runtime_dir = install_root / ".agents" / "skills" / skill_name
-        claude_link_value = f"../../.agents/skills/{skill_name}"
-        codex_link_value = None
-    else:
-        raise SetupError(f"Unsupported install mode: {install_mode}")
+    if install_mode != "local":
+        raise SetupError(f"Unsupported install mode: {install_mode}. Only local is supported.")
+    if repo_root is None:
+        raise SetupError("Local install requires a repository path.")
+
+    install_root = resolve_repo_root(repo_root)
+    runtime_dir = install_root / ".agents" / "skills" / skill_name
 
     locale_mode = resolve_locale_mode(install_mode, runtime_dir, requested_locale)
 
     sync_skill_copy(source_dir, runtime_dir)
     render_skill_metadata(runtime_dir, locale_mode, install_mode)
+    prune_local_runtime_copy(runtime_dir)
     write_install_manifest(
         skill_dir=runtime_dir,
         skill_name=skill_name,
         install_mode=install_mode,
         locale_mode=locale_mode,
-        source_dir=source_dir if install_mode == "global" else None,
+        source_dir=None,
     )
-    bootstrap_runner(runtime_dir)
-
-    claude_link = install_root / ".claude" / "skills" / skill_name
-    ensure_skill_link(claude_link_value, claude_link)
-    codex_link: Optional[Path] = None
-    if codex_link_value is not None:
-        codex_link = install_root / ".codex" / "skills" / skill_name
-        ensure_skill_link(codex_link_value, codex_link)
-    if install_mode == "global":
-        metadata = build_localized_metadata(runtime_dir, locale_mode, install_mode)
-        register_global_skill_triggers(skill_name, metadata["triggers"])
 
     return InstallResult(
         skill_name=skill_name,
@@ -692,7 +405,5 @@ def perform_install(
         source_dir=source_dir,
         runtime_dir=runtime_dir,
         install_root=install_root,
-        claude_link=claude_link,
-        codex_link=codex_link,
         locale_mode=locale_mode,
     )

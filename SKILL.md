@@ -29,7 +29,9 @@ triggers:
   - `<gmr-command>` is `/abs/path/to/scripts/gmr`
   - `<bootstrap-command>` is `/abs/path/to/scripts/bootstrap-glab-keychain.sh`
   - `<ensure-command>` is `/abs/path/to/scripts/ensure-glab-auth.sh`
-- Use those absolute command paths for every command in this skill.
+- Prefer those absolute command paths unless the repository bootstrap already provisioned `.agents/bin/gmr` through repo-level `make agents` and that repo-local bin layer is on `PATH`.
+- Bare `gmr` is acceptable only when it resolves through that repo-local `.agents/bin` layer.
+- This skill does not provision `PATH` itself. Repo-level command shims belong to the project bootstrap layer.
 - Do not run `scripts/gmr` as a path relative to the current working directory.
 - Prefer a full MR URL when the user provides one.
 - Prefer `<gmr-command>` for agent-facing MR lists, MR status, pipeline diagnostics, failed-job root cause extraction, and manual-job operations.
@@ -379,6 +381,18 @@ Do this once per response. Do not loop on repeated self-checks after you already
 ## Setup Fallback
 
 Use this only when installation or authentication is missing.
+
+Install into one repository from the source skill repo:
+
+```bash
+make install REPO=/abs/path/to/repo LOCALE=<locale>
+```
+
+Bootstrap the committed repo-local runtime after clone or when a project bootstrap script refreshes the tracked runtime:
+
+```bash
+make -C <repo>/.agents/skills/skill-glab-mr-workflow skill
+```
 
 Install:
 
