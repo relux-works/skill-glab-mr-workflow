@@ -1,0 +1,16 @@
+- my open merge requests
+- merge requests assigned to me
+- my review queue
+- review this mr
+- create merge request
+- gitlab mr status
+- approve this mr
+- merge this mr
+- pipeline failed in mr
+- manual jobs on mr
+- gitlab merge request
+- show my open merge requests
+- review this merge request
+- check gitlab auth
+- bootstrap gitlab auth
+- gitlab login

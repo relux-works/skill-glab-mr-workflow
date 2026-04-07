@@ -21,10 +21,12 @@ GitLab merge request workflow skill for Codex and Claude Code, built around the 
 
 - `SKILL.md`: skill instructions and workflow
 - `agents/openai.yaml`: UI metadata
-- `locales/metadata.json`: install-time localized metadata and trigger catalog
+- `locales/metadata.json`: install-time localized metadata excluding trigger phrases
+- `.skill_triggers`: localized markdown trigger catalogs copied into runtime and treated as the single source of truth for skill triggers
 - `Makefile`: public entrypoints for `make install` in the source repo and `make skill` in a committed runtime copy
 - `scripts/setup_main.py`, `scripts/setup_support.py`: source-install helper for repo-local copies, metadata rendering, and runtime packaging
 - `scripts/bootstrap.sh`: skill-local bootstrap entrypoint for committed runtime copies
+- `scripts/make-agents.sh`: `make agents` hook entrypoint for repo-level `check`/`setup` phases
 - `scripts/gmr`: high-level MR workflow wrapper
 - `scripts/bootstrap-glab-keychain.sh`: initial auth bootstrap
 - `scripts/ensure-glab-auth.sh`: auth preflight
@@ -66,9 +68,10 @@ scripts/gmr mr approve https://gitlab.example.com/group/project/-/merge_requests
 scripts/gmr mr merge https://gitlab.example.com/group/project/-/merge_requests/123
 ```
 
-Localization is part of the source install helper. This repo supplies locale
-data in `locales/metadata.json`; `make install` renders the installed `SKILL.md`
-and `agents/openai.yaml` for the selected locale and produces a committed-safe
+Localization is part of the source install helper. This repo supplies localized
+UI metadata in `locales/metadata.json` and localized trigger catalogs in
+`.skill_triggers/*.md`; `make install` renders the installed `SKILL.md` and
+`agents/openai.yaml` for the selected locale and produces a committed-safe
 runtime copy for the target repository.
 
 ## License

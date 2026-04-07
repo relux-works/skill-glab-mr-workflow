@@ -1,41 +1,18 @@
 {
   "locales": {
     "en": {
-      "description": "Use when Codex needs to work with one or more self-hosted or cloud GitLab instances through the bundled GitLab workflow wrappers, including listing my open merge requests, assigned or review-queue merge requests, macOS Keychain auth, merge request URLs or repo/iid targets, MR creation, review reads, approvals, merges, pipeline status checks, failed job trace summaries, and manual CI job execution through the bundled gmr wrapper.",
+      "description": "GitLab: my and assigned MRs, review queue, MR and pipeline status, manual jobs, and authentication checks.",
       "display_name": "skill-glab-mr-workflow",
-      "short_description": "GitLab MR workflow, my MRs, CI, reviews",
-      "default_prompt": "Use $skill-glab-mr-workflow for GitLab merge request work through Keychain-backed glab commands, especially prompts like 'show my open merge requests', 'MRs assigned to me', 'my review queue', MR status, pipeline failures, manual jobs, reviews, approvals, and merges.",
-      "local_prefix": "[local] ",
-      "triggers": [
-        "glab mr",
-        "gitlab merge request",
-        "gitlab mr status",
-        "my open merge requests",
-        "show my open merge requests",
-        "merge requests assigned to me",
-        "my review queue",
-        "pipeline failed in mr",
-        "manual jobs on mr"
-      ]
+      "short_description": "GitLab workflows, MRs, CI, auth",
+      "default_prompt": "Use $skill-glab-mr-workflow for GitLab workflows around merge requests, pipelines, manual jobs, and authentication, especially prompts like 'show my open merge requests', 'MRs assigned to me', 'my review queue', MR status, pipeline failures, manual jobs, authentication checks, reviews, approvals, and merges.",
+      "local_prefix": "[local] "
     },
     "ru": {
-      "description": "Используй, когда нужно работать с одним или несколькими self-hosted или cloud GitLab инстансами через bundled GitLab workflow wrappers, включая список моих открытых merge requests, назначенных мне или ожидающих моего ревью MR, macOS Keychain-backed auth, merge request URL или repo/iid targets, создание MR, review reads, approvals, merges, статусы pipeline, summary причин падения job и manual job операции через bundled `gmr` wrapper.",
+      "description": "GitLab: мои и назначенные мне MR, очередь ревью, статус MR и пайплайнов, ручные джобы и проверка аутентификации.",
       "display_name": "skill-glab-mr-workflow",
-      "short_description": "GitLab MR workflow, мои MR, CI, ревью",
-      "default_prompt": "Используй $skill-glab-mr-workflow для работы с GitLab merge requests через glab-команды с хранением секретов в Keychain, особенно для запросов вроде 'покажи мои открытые MR', 'что назначено мне', 'что у меня на ревью', статуса MR, падений pipeline, manual jobs, ревью, approve и merge.",
-      "local_prefix": "[локально] ",
-      "triggers": [
-        "gitlab mr",
-        "мердж реквест gitlab",
-        "мои открытые mr",
-        "покажи мои открытые mr",
-        "какие у меня открытые merge requests",
-        "что назначено мне",
-        "что у меня на ревью",
-        "статус mr",
-        "почему pipeline упал в mr",
-        "ручные джобы mr"
-      ]
+      "short_description": "GitLab workflows, MR, CI, auth",
+      "default_prompt": "Используй $skill-glab-mr-workflow для GitLab workflows вокруг merge requests, pipeline, ручных jobs и аутентификации, особенно для запросов вроде 'покажи мои открытые MR', 'что назначено мне', 'что у меня на ревью', статуса MR, падений pipeline, manual jobs, проверки аутентификации, ревью, approve и merge.",
+      "local_prefix": "[локально] "
     }
   }
 }

@@ -67,7 +67,6 @@ class SetupSupportTest(unittest.TestCase):
                             "short_description": "English Short",
                             "default_prompt": "Use $skill-glab-mr-workflow in English.",
                             "local_prefix": "[local] ",
-                            "triggers": ["my open merge requests", "gitlab mr status", "gitlab merge request"],
                         },
                         "ru": {
                             "description": "Русское описание",
@@ -75,7 +74,6 @@ class SetupSupportTest(unittest.TestCase):
                             "short_description": "Русский Short",
                             "default_prompt": "Используй $skill-glab-mr-workflow по-русски.",
                             "local_prefix": "[локально] ",
-                            "triggers": ["мои открытые mr", "gitlab mr status"],
                         },
                     }
                 },
@@ -83,6 +81,15 @@ class SetupSupportTest(unittest.TestCase):
                 indent=2,
             )
             + "\n",
+            encoding="utf-8",
+        )
+        (skill_dir / ".skill_triggers").mkdir(parents=True, exist_ok=True)
+        (skill_dir / ".skill_triggers" / "en.md").write_text(
+            "- my open merge requests\n- merge requests assigned to me\n- my review queue\n- review this mr\n- create merge request\n- gitlab mr status\n- approve this mr\n",
+            encoding="utf-8",
+        )
+        (skill_dir / ".skill_triggers" / "ru.md").write_text(
+            "- мои открытые mr\n- что назначено мне\n- что у меня на ревью\n- проверь этот mr\n- создай merge request\n- статус mr\n- апрувни mr\n",
             encoding="utf-8",
         )
         (skill_dir / ".git" / "config").write_text("", encoding="utf-8")
@@ -99,12 +106,11 @@ class SetupSupportTest(unittest.TestCase):
         skill_text = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
         openai_yaml = (skill_dir / "agents" / "openai.yaml").read_text(encoding="utf-8")
 
-        self.assertIn('description: "[локально] Русское описание / English localized description"', skill_text)
+        self.assertIn('description: "Русское описание Триггеры: \\"мои открытые mr\\", \\"что назначено мне\\", \\"что у меня на ревью\\", \\"проверь этот mr\\", \\"создай merge request\\", \\"статус mr\\". / English localized description Triggers: \\"my open merge requests\\", \\"merge requests assigned to me\\", \\"my review queue\\", \\"review this mr\\", \\"create merge request\\", \\"gitlab mr status\\"."', skill_text)
         self.assertIn('  - "мои открытые mr"\n', skill_text)
-        self.assertIn('  - "gitlab mr status"\n', skill_text)
+        self.assertIn('  - "статус mr"\n', skill_text)
         self.assertIn('  - "my open merge requests"\n', skill_text)
-        self.assertIn('  - "gitlab merge request"\n', skill_text)
-        self.assertEqual(skill_text.count('"gitlab mr status"'), 1)
+        self.assertIn('  - "merge requests assigned to me"\n', skill_text)
         self.assertIn('display_name: "[локально] GitLab MR Workflow"', openai_yaml)
         self.assertIn('short_description: "[локально] Русский Short"', openai_yaml)
 
@@ -173,10 +179,35 @@ class SetupSupportTest(unittest.TestCase):
         self.assertFalse((result.runtime_dir / "scripts" / "setup_main.py").exists())
         self.assertFalse((result.runtime_dir / "scripts" / "setup_support.py").exists())
         self.assertFalse((result.runtime_dir / "tests").exists())
+        self.assertTrue((result.runtime_dir / ".skill_triggers" / "en.md").exists())
+        self.assertTrue((result.runtime_dir / ".skill_triggers" / "ru.md").exists())
         manifest = json.loads((result.runtime_dir / ss.MANIFEST_FILENAME).read_text(encoding="utf-8"))
         self.assertEqual(manifest["schema_version"], 2)
         self.assertNotIn("source_dir", manifest)
         self.assertNotIn("runtime_dir", manifest)
+
+    def test_render_skill_metadata_uses_markdown_triggers_as_single_source(self) -> None:
+        source_dir = self.make_source_skill_dir()
+
+        ss.render_skill_metadata(source_dir, "en", "local")
+
+        skill_text = (source_dir / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn('  - "my open merge requests"', skill_text)
+        self.assertIn('  - "gitlab mr status"', skill_text)
+        self.assertIn('description: "English localized description Triggers: \\"my open merge requests\\", \\"merge requests assigned to me\\", \\"my review queue\\", \\"review this mr\\", \\"create merge request\\", \\"gitlab mr status\\"."', skill_text)
+        self.assertNotIn('[local] English localized description', skill_text)
+
+    def test_load_metadata_catalog_rejects_trigger_lists_in_metadata_json(self) -> None:
+        source_dir = self.make_source_skill_dir()
+        metadata_path = source_dir / "locales" / "metadata.json"
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        metadata["locales"]["en"]["triggers"] = ["legacy trigger"]
+        metadata_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+        with self.assertRaises(ss.SetupError) as exc:
+            ss.load_metadata_catalog(source_dir)
+
+        self.assertIn("must define triggers only in", str(exc.exception))
 
     def test_resolve_source_dir_prefers_manifest_source_dir(self) -> None:
         source_dir = self.make_source_skill_dir().resolve()

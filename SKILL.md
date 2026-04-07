@@ -1,16 +1,23 @@
 ---
 name: skill-glab-mr-workflow
-description: Use when Codex needs to work with one or more self-hosted or cloud GitLab instances through the bundled GitLab workflow wrappers, including listing my open merge requests, assigned or review-queue merge requests, macOS Keychain auth, merge request URLs or repo/iid targets, MR creation, review reads, approvals, merges, pipeline status checks, failed job trace summaries, and manual CI job execution through the bundled gmr wrapper.
+description: GitLab: my and assigned MRs, review queue, MR and pipeline status, manual jobs, and authentication checks.
 triggers:
-  - "glab mr"
-  - "gitlab merge request"
-  - "gitlab mr status"
   - "my open merge requests"
-  - "show my open merge requests"
   - "merge requests assigned to me"
   - "my review queue"
+  - "review this mr"
+  - "create merge request"
+  - "gitlab mr status"
+  - "approve this mr"
+  - "merge this mr"
   - "pipeline failed in mr"
   - "manual jobs on mr"
+  - "gitlab merge request"
+  - "show my open merge requests"
+  - "review this merge request"
+  - "check gitlab auth"
+  - "bootstrap gitlab auth"
+  - "gitlab login"
 ---
 
 # skill-glab-mr-workflow
