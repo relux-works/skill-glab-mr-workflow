@@ -17,8 +17,8 @@ Use this file as the fastest command chooser for weak models. Prefer the left-to
 | Run a manual job | `<gmr-command> mr run-manual <job-id-or-name> --mr <mr-target>` | If name is ambiguous, stop and ask. |
 | Build review context | `<gmr-command> mr review-context <mr-target>` | Filters bot noise by default. |
 | Build review context with bots | `<gmr-command> mr review-context <mr-target> --include-bots` | Use only when bot notes matter. |
-| Create MR from current branch | `<gmr-command> mr create --fill` | Fast path. Non-interactive. |
-| Create MR with explicit fields | `<gmr-command> mr create --title '<title>' --description '<description>'` | Add `--target-branch`, `--draft`, `--label`, `--reviewer`, `--assignee` as needed. |
+| Create MR from current branch with generic fill | `<gmr-command> mr create --fill` | Convenience path only when the repository has no repo-local title, description, or checklist policy. Post-read the created MR afterwards. |
+| Create MR with explicit policy-driven fields | `<gmr-command> mr create --title '<title>' --description '<description>'` | Default mode when repo-local conventions exist. Add `--target-branch`, `--draft`, `--label`, `--reviewer`, `--assignee` as needed, then validate the created MR after the write. |
 | Approve MR | `<gmr-command> mr approve <mr-target>` | Uses resolved head SHA automatically unless overridden. |
 | Merge MR | `<gmr-command> mr merge <mr-target>` | Refuses draft or failed head pipeline. |
 | Merge while pipeline is still running | `<gmr-command> mr merge <mr-target> --auto-merge` | Use only when user explicitly wants auto-merge. |
@@ -36,5 +36,7 @@ Use this file as the fastest command chooser for weak models. Prefer the left-to
 - Prefer `gmr` over raw `glab` whenever both can do the job.
 - Prefer non-interactive commands.
 - Prefer resolved context over re-detecting context.
+- If repo-local MR conventions exist, default to explicit `title` and `description` instead of `--fill`.
+- Always re-read the created MR after `mr create` and let the calling layer validate repo-local policy.
 - `--mine` resolves the current developer from git email plus authenticated GitLab username.
 - For prompts like "мои открытые MR" or "my open merge requests", prefer `mr list --mine`.

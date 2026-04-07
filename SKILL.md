@@ -316,12 +316,16 @@ Rules:
 
 - Prefer `gmr mr create` over raw `glab mr create` for weak-model-safe writes.
 - `gmr mr create` is non-interactive. Use `--fill` or provide `--title`. If the source branch cannot be inferred from the current checkout, pass `--source-branch`.
+- Before `mr create`, the calling layer must apply repo-local write policy when it exists. That includes repository-specific rules for MR title, description, checklist, or template content.
+- Treat `--fill` only as a convenience path for repositories without repo-local requirements for MR title, description, or checklist content.
+- If repo-local conventions exist, default to explicit `--title` and `--description` generated from those conventions instead of relying on `--fill`.
+- After every `mr create`, do a mandatory post-write check: re-read the created MR payload and validate it in the calling layer against repo-local policy before reporting success.
 - Prefer `gmr mr approve` and `gmr mr merge` over raw `glab` for weak-model-safe writes.
 - Prefer `--sha <head-sha>` on `approve` and `merge` when acting on a reviewed commit.
 - Do not approve or merge unless the user explicitly asks for that write action.
 - `gmr mr merge` refuses draft MRs.
 - `gmr mr merge` refuses failed head pipelines and requires `--auto-merge` if the head pipeline is still running.
-- If the user asks to create an MR and the branch and repo are already obvious, `gmr mr create --fill` is the fast path.
+- `gmr` itself stays generic. It returns facts about the created MR, but it does not know whether a project-specific description or checklist is valid.
 - If the title, description, target branch, labels, reviewers, or draft state must be explicit, pass them directly instead of opening the browser.
 - If merge depends on a green pipeline and the pipeline is red, say so before executing the merge.
 
