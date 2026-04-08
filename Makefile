@@ -5,7 +5,7 @@ install:
 	python3 scripts/setup_main.py "$(REPO)" $(if $(LOCALE),--locale "$(LOCALE)")
 
 skill:
-	@./scripts/bootstrap.sh --quiet
+	@python3 scripts/bootstrap_runtime.py --quiet
 
 test:
 	@python3 -m unittest -q tests.test_gmr_main tests.test_setup_support

@@ -163,6 +163,132 @@ class BotFilteringTests(unittest.TestCase):
         self.assertEqual([item["id"] for item in full], ["bot-only", "human"])
 
 
+class ParseTargetHostTests(unittest.TestCase):
+    def test_https_url(self) -> None:
+        result = gmr_main.parse_target_host("https://gitlab.example.com/group/project")
+        self.assertEqual(result["hostname"], "gitlab.example.com")
+        self.assertIsNone(result["authority"])
+
+    def test_https_url_with_port(self) -> None:
+        result = gmr_main.parse_target_host("https://gitlab.example.com:8443/path")
+        self.assertEqual(result["hostname"], "gitlab.example.com")
+        self.assertEqual(result["authority"], "gitlab.example.com:8443")
+
+    def test_bare_hostname(self) -> None:
+        result = gmr_main.parse_target_host("gitlab.example.com")
+        self.assertEqual(result["hostname"], "gitlab.example.com")
+        self.assertIsNone(result["authority"])
+
+    def test_hostname_with_port(self) -> None:
+        result = gmr_main.parse_target_host("gitlab.example.com:8080")
+        self.assertEqual(result["hostname"], "gitlab.example.com")
+        self.assertEqual(result["authority"], "gitlab.example.com:8080")
+
+    def test_hostname_with_path(self) -> None:
+        result = gmr_main.parse_target_host("gitlab.example.com/group/project")
+        self.assertEqual(result["hostname"], "gitlab.example.com")
+        self.assertIsNone(result["authority"])
+
+    def test_user_at_hostname(self) -> None:
+        result = gmr_main.parse_target_host("git@gitlab.example.com")
+        self.assertEqual(result["hostname"], "gitlab.example.com")
+        self.assertIsNone(result["authority"])
+
+    def test_empty_raises(self) -> None:
+        with self.assertRaises(gmr_main.CommandError):
+            gmr_main.parse_target_host("")
+
+    def test_http_url(self) -> None:
+        result = gmr_main.parse_target_host("http://gitlab.local/")
+        self.assertEqual(result["hostname"], "gitlab.local")
+        self.assertIsNone(result["authority"])
+
+    def test_parse_target_hostname_convenience(self) -> None:
+        self.assertEqual(gmr_main.parse_target_hostname("https://gitlab.example.com:8443/path"), "gitlab.example.com")
+
+
+class BootstrapGlabAuthTests(unittest.TestCase):
+    def test_port_preserved_in_api_host(self) -> None:
+        with mock.patch.object(gmr_main, "require_glab"), mock.patch.object(
+            gmr_main.sys.stdin, "isatty", return_value=False
+        ), mock.patch.object(
+            gmr_main.sys, "stdin", **{"read.return_value": "glpat-token\n", "isatty.return_value": False}
+        ), mock.patch.object(gmr_main, "run_command") as run_mock, mock.patch.dict(
+            gmr_main.os.environ, {}, clear=True
+        ):
+            gmr_main.bootstrap_glab_auth("https://gitlab.example.com:8443/")
+
+        login_cmd = run_mock.call_args_list[0].args[0]
+        self.assertIn("--api-host", login_cmd)
+        idx = login_cmd.index("--api-host")
+        self.assertEqual(login_cmd[idx + 1], "gitlab.example.com:8443")
+        self.assertIn("--hostname", login_cmd)
+        idx = login_cmd.index("--hostname")
+        self.assertEqual(login_cmd[idx + 1], "gitlab.example.com")
+
+    def test_no_api_host_when_no_port(self) -> None:
+        with mock.patch.object(gmr_main, "require_glab"), mock.patch.object(
+            gmr_main.sys, "stdin", **{"read.return_value": "glpat-token\n", "isatty.return_value": False}
+        ), mock.patch.object(gmr_main, "run_command") as run_mock, mock.patch.dict(
+            gmr_main.os.environ, {}, clear=True
+        ):
+            gmr_main.bootstrap_glab_auth("https://gitlab.example.com/")
+
+        login_cmd = run_mock.call_args_list[0].args[0]
+        self.assertNotIn("--api-host", login_cmd)
+
+    def test_env_api_host_overrides_port(self) -> None:
+        with mock.patch.object(gmr_main, "require_glab"), mock.patch.object(
+            gmr_main.sys, "stdin", **{"read.return_value": "glpat-token\n", "isatty.return_value": False}
+        ), mock.patch.object(gmr_main, "run_command") as run_mock, mock.patch.dict(
+            gmr_main.os.environ, {"GITLAB_API_HOST": "api.gitlab.corp:9999"}, clear=True
+        ):
+            gmr_main.bootstrap_glab_auth("https://gitlab.example.com:8443/")
+
+        login_cmd = run_mock.call_args_list[0].args[0]
+        idx = login_cmd.index("--api-host")
+        self.assertEqual(login_cmd[idx + 1], "api.gitlab.corp:9999")
+
+    def test_env_protocol_and_git_protocol(self) -> None:
+        with mock.patch.object(gmr_main, "require_glab"), mock.patch.object(
+            gmr_main.sys, "stdin", **{"read.return_value": "glpat-token\n", "isatty.return_value": False}
+        ), mock.patch.object(gmr_main, "run_command") as run_mock, mock.patch.dict(
+            gmr_main.os.environ,
+            {"GITLAB_API_PROTOCOL": "http", "GITLAB_GIT_PROTOCOL": "https"},
+            clear=True,
+        ):
+            gmr_main.bootstrap_glab_auth("gitlab.example.com")
+
+        login_cmd = run_mock.call_args_list[0].args[0]
+        idx = login_cmd.index("--api-protocol")
+        self.assertEqual(login_cmd[idx + 1], "http")
+        idx = login_cmd.index("--git-protocol")
+        self.assertEqual(login_cmd[idx + 1], "https")
+
+    def test_scheme_inferred_as_api_protocol(self) -> None:
+        with mock.patch.object(gmr_main, "require_glab"), mock.patch.object(
+            gmr_main.sys, "stdin", **{"read.return_value": "glpat-token\n", "isatty.return_value": False}
+        ), mock.patch.object(gmr_main, "run_command") as run_mock, mock.patch.dict(
+            gmr_main.os.environ, {}, clear=True
+        ):
+            gmr_main.bootstrap_glab_auth("http://gitlab.local/")
+
+        login_cmd = run_mock.call_args_list[0].args[0]
+        idx = login_cmd.index("--api-protocol")
+        self.assertEqual(login_cmd[idx + 1], "http")
+
+
+class RequireGlabTests(unittest.TestCase):
+    def test_raises_when_glab_missing(self) -> None:
+        with mock.patch.object(gmr_main.shutil, "which", return_value=None):
+            with self.assertRaisesRegex(gmr_main.CommandError, "glab is not installed"):
+                gmr_main.require_glab()
+
+    def test_passes_when_glab_present(self) -> None:
+        with mock.patch.object(gmr_main.shutil, "which", return_value="/usr/bin/glab"):
+            gmr_main.require_glab()
+
+
 class AuthEnsureMrTests(unittest.TestCase):
     def test_command_auth_ensure_mr_uses_resolved_hostname(self) -> None:
         args = SimpleNamespace(target="42", repo="group/project", hostname="gitlab.example.com")
@@ -170,12 +296,10 @@ class AuthEnsureMrTests(unittest.TestCase):
             gmr_main,
             "resolve_mr_target",
             return_value={"hostname": "gitlab.example.com", "repo": "group/project", "iid": "42"},
-        ), mock.patch.object(gmr_main.subprocess, "run") as run_mock:
+        ), mock.patch.object(gmr_main, "ensure_glab_auth") as ensure_mock:
             gmr_main.command_auth_ensure_mr(args)
 
-        call_args = run_mock.call_args[0][0]
-        self.assertTrue(call_args[0].endswith("ensure-glab-auth.sh"))
-        self.assertEqual(call_args[1], "gitlab.example.com")
+        ensure_mock.assert_called_once_with("gitlab.example.com")
 
 
 class CurrentUserResolutionTests(unittest.TestCase):

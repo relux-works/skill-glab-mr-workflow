@@ -33,13 +33,12 @@ triggers:
 - Before sending the final answer, do one completeness check against the original user request. If the answer is not good enough yet, keep using tools instead of finalizing.
 - Resolve command paths from this skill file path.
 - If the skill file path is `/abs/path/to/SKILL.md`, then:
-  - `<gmr-command>` is `/abs/path/to/scripts/gmr`
-  - `<bootstrap-command>` is `/abs/path/to/scripts/bootstrap-glab-auth.sh`
-  - `<ensure-command>` is `/abs/path/to/scripts/ensure-glab-auth.sh`
-- Prefer those absolute command paths unless the repository bootstrap already provisioned `.agents/bin/gmr` through repo-level `make agents` and that repo-local bin layer is on `PATH`.
+  - `<gmr-command>` is `/abs/path/to/scripts/gmr` (Unix) or `/abs/path/to/scripts/gmr.cmd` (Windows)
+- Prefer the absolute command path unless the repository bootstrap already provisioned `.agents/bin/gmr` through repo-level `make agents` and that repo-local bin layer is on `PATH`.
 - Bare `gmr` is acceptable only when it resolves through that repo-local `.agents/bin` layer.
 - This skill does not provision `PATH` itself. Repo-level command shims belong to the project bootstrap layer.
 - Do not run `scripts/gmr` as a path relative to the current working directory.
+- Auth ensure and auth bootstrap are subcommands of `<gmr-command>`, not separate scripts.
 - Prefer a full MR URL when the user provides one.
 - Prefer `<gmr-command>` for agent-facing MR lists, MR status, pipeline diagnostics, failed-job root cause extraction, and manual-job operations.
 - Prefer `<gmr-command>` for weak-model-safe create, approve, and merge actions.
@@ -53,10 +52,10 @@ triggers:
 Always begin with auth verification for the actual target type:
 
 ```bash
-<ensure-command> <hostname-or-url>
+<gmr-command> auth ensure <hostname-or-url>
 ```
 
-For merge request targets, use the bundled resolver instead of passing the target directly to `<ensure-command>`:
+For merge request targets, use the bundled resolver:
 
 ```bash
 <gmr-command> auth ensure-mr <mr-target>
@@ -77,15 +76,15 @@ In all commands below:
 
 Rules:
 
-- Never pass a bare MR IID like `123` to `<ensure-command>`.
-- Use `<ensure-command>` only for explicit hostnames or host URLs.
+- Never pass a bare MR IID like `123` to `auth ensure`.
+- Use `<gmr-command> auth ensure <hostname-or-url>` for explicit hostnames or host URLs.
 - Use `<gmr-command> auth ensure-mr ...` for anything that is an MR URL or MR IID.
 - After the first successful `<gmr-command>` read, reuse the resolved `hostname`, `repo`, `iid`, and `head_pipeline.id` from that output for all raw `glab` calls. Do not re-infer them if you already have them.
 
 If auth is missing, bootstrap it first:
 
 ```bash
-<bootstrap-command> https://gitlab.example.com/
+<gmr-command> auth bootstrap https://gitlab.example.com/
 ```
 
 If several hosts are configured and the user did not specify one, inspect them with:
@@ -414,13 +413,13 @@ install glab and ensure it is available in PATH
 Bootstrap OS-keyring-backed auth:
 
 ```bash
-<bootstrap-command> https://gitlab.example.com/
+<gmr-command> auth bootstrap https://gitlab.example.com/
 ```
 
 Verify auth:
 
 ```bash
-<ensure-command> https://gitlab.example.com/
+<gmr-command> auth ensure https://gitlab.example.com/
 glab auth status --hostname gitlab.example.com
 ```
 

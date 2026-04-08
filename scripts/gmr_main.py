@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import argparse
+import getpass
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import urllib.parse
@@ -211,6 +213,35 @@ def glab_cli_env(hostname: str) -> dict[str, str]:
 def extract_mr_web_url(text: str) -> str | None:
     match = MR_WEB_URL_RE.search(text)
     return match.group(0) if match else None
+
+
+def parse_target_host(target: str) -> dict[str, str | None]:
+    """Return hostname and authority (host:port when port is present) from a target."""
+    raw = target.strip()
+    if not raw:
+        raise CommandError("Empty hostname or URL.")
+    if "://" in raw:
+        parsed = urllib.parse.urlparse(raw)
+        if not parsed.hostname:
+            raise CommandError(f"Could not parse a hostname from: {raw}")
+        authority = f"{parsed.hostname}:{parsed.port}" if parsed.port else None
+        return {"hostname": parsed.hostname, "authority": authority}
+    cleaned = raw
+    if "@" in cleaned:
+        cleaned = cleaned.split("@", 1)[1]
+    cleaned = cleaned.split("/", 1)[0]
+    if ":" in cleaned:
+        hostname = cleaned.split(":", 1)[0]
+        if not hostname:
+            raise CommandError(f"Could not parse a hostname from: {raw}")
+        return {"hostname": hostname, "authority": cleaned}
+    if not cleaned:
+        raise CommandError(f"Could not parse a hostname from: {raw}")
+    return {"hostname": cleaned, "authority": None}
+
+
+def parse_target_hostname(target: str) -> str:
+    return parse_target_host(target)["hostname"]
 
 
 def parse_git_remote(remote: str) -> tuple[str, str]:
@@ -719,29 +750,79 @@ def find_manual_job(mr_target: str, repo: str | None, hostname: str | None, iden
     return resolved, head_pipeline, matches[0]
 
 
-def command_auth_ensure(args: argparse.Namespace) -> None:
-    scripts_dir = Path(__file__).resolve().parent
-    subprocess.run(
-        [str(scripts_dir / "ensure-glab-auth.sh"), args.target],
-        check=True,
+def require_glab() -> None:
+    if shutil.which("glab") is None:
+        raise CommandError("glab is not installed or not in PATH.")
+
+
+def ensure_glab_auth(hostname: str) -> None:
+    require_glab()
+    result = subprocess.run(
+        ["glab", "auth", "status", "--hostname", hostname],
+        capture_output=True,
+        text=True,
     )
+    if result.returncode == 0:
+        print(f"glab authentication is configured for {hostname}.", file=sys.stderr)
+        return
+    raise CommandError(
+        f"glab authentication is missing for {hostname}.\n"
+        f"Bootstrap it with: gmr auth bootstrap {hostname}"
+    )
+
+
+def bootstrap_glab_auth(target: str) -> None:
+    require_glab()
+    host_info = parse_target_host(target)
+    hostname = host_info["hostname"]
+
+    git_protocol = os.environ.get("GITLAB_GIT_PROTOCOL", "ssh")
+    api_host = os.environ.get("GITLAB_API_HOST", "")
+    api_protocol = os.environ.get("GITLAB_API_PROTOCOL", "")
+
+    if not api_protocol and "://" in target:
+        parsed = urllib.parse.urlparse(target)
+        if parsed.scheme:
+            api_protocol = parsed.scheme
+
+    if not api_host and host_info["authority"]:
+        api_host = host_info["authority"]
+
+    if sys.stdin.isatty():
+        token = getpass.getpass(f"GitLab PAT for {hostname}: ")
+    else:
+        token = sys.stdin.read().strip()
+    if not token:
+        raise CommandError("No token provided on stdin or prompt.")
+
+    cmd = [
+        "glab", "auth", "login",
+        "--hostname", hostname,
+        "--git-protocol", git_protocol,
+        "--use-keyring",
+        "--stdin",
+    ]
+    if api_host:
+        cmd += ["--api-host", api_host]
+    if api_protocol:
+        cmd += ["--api-protocol", api_protocol]
+
+    run_command(cmd, input_text=token)
+    run_command(["glab", "auth", "status", "--hostname", hostname], capture_output=False)
+
+
+def command_auth_ensure(args: argparse.Namespace) -> None:
+    hostname = parse_target_hostname(args.target)
+    ensure_glab_auth(hostname)
 
 
 def command_auth_ensure_mr(args: argparse.Namespace) -> None:
     ctx = resolve_mr_target(args.target, args.repo, args.hostname)
-    scripts_dir = Path(__file__).resolve().parent
-    subprocess.run(
-        [str(scripts_dir / "ensure-glab-auth.sh"), ctx["hostname"]],
-        check=True,
-    )
+    ensure_glab_auth(ctx["hostname"])
 
 
 def command_auth_bootstrap(args: argparse.Namespace) -> None:
-    scripts_dir = Path(__file__).resolve().parent
-    subprocess.run(
-        [str(scripts_dir / "bootstrap-glab-auth.sh"), args.target],
-        check=True,
-    )
+    bootstrap_glab_auth(args.target)
 
 
 def command_mr_create(args: argparse.Namespace) -> None:
