@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import platform
 import re
 import shutil
 import subprocess
@@ -12,6 +13,7 @@ from typing import Any, Optional
 
 MANIFEST_FILENAME = ".skill-install.json"
 CATALOG_RELATIVE_PATH = Path("locales") / "metadata.json"
+DEPENDENCIES_RELATIVE_PATH = Path("dependencies.json")
 SKILL_TRIGGERS_DIR = Path(".skill_triggers")
 SUPPORTED_BASE_LOCALES = ("en", "ru")
 SUPPORTED_LOCALE_MODES = ("en", "ru", "en-ru", "ru-en")
@@ -149,6 +151,112 @@ def parse_locale_mode(value: str) -> LocaleSelection:
         )
 
     return LocaleSelection(mode=normalized, primary_locale=normalized, secondary_locale=None)
+
+
+def load_declared_dependencies(skill_dir: Path) -> list[dict[str, str]]:
+    path = skill_dir / DEPENDENCIES_RELATIVE_PATH
+    if not path.exists():
+        return []
+
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise SetupError(f"Invalid dependency catalog: {path}") from exc
+
+    dependencies = payload.get("dependencies")
+    if not isinstance(dependencies, list):
+        raise SetupError(f"Dependency catalog must contain a 'dependencies' array: {path}")
+
+    normalized: list[dict[str, str]] = []
+    for index, dependency in enumerate(dependencies):
+        if not isinstance(dependency, dict):
+            raise SetupError(f"Dependency #{index + 1} must be an object in {path}")
+        command = dependency.get("command")
+        install = dependency.get("install")
+        if not isinstance(command, str) or not command.strip():
+            raise SetupError(f"Dependency #{index + 1} must define a non-empty 'command' in {path}")
+        if not isinstance(install, str) or not install.strip():
+            raise SetupError(f"Dependency #{index + 1} must define a non-empty 'install' in {path}")
+        normalized.append(
+            {
+                "command": command.strip(),
+                "install": install.strip(),
+            }
+        )
+    return normalized
+
+
+def load_supported_platforms(skill_dir: Path) -> list[str]:
+    path = skill_dir / DEPENDENCIES_RELATIVE_PATH
+    if not path.exists():
+        return []
+
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise SetupError(f"Invalid dependency catalog: {path}") from exc
+
+    platforms = payload.get("supported_platforms")
+    if platforms is None:
+        return []
+    if not isinstance(platforms, list):
+        raise SetupError(f"Dependency catalog must contain 'supported_platforms' as an array: {path}")
+
+    normalized: list[str] = []
+    for index, value in enumerate(platforms):
+        if not isinstance(value, str) or not value.strip():
+            raise SetupError(f"Platform #{index + 1} must be a non-empty string in {path}")
+        normalized.append(value.strip().lower())
+    return normalized
+
+
+def ensure_supported_platform(skill_dir: Path, locale_mode: str) -> None:
+    supported_platforms = load_supported_platforms(skill_dir)
+    if not supported_platforms:
+        return
+
+    current_platform = platform.system().strip().lower()
+    if current_platform in supported_platforms:
+        return
+
+    locale = parse_locale_mode(locale_mode).primary_locale
+    supported_rendered = ", ".join(supported_platforms)
+    path = skill_dir / DEPENDENCIES_RELATIVE_PATH
+    if locale == "ru":
+        raise SetupError(
+            f"Скилл не поддерживает текущую платформу `{current_platform}`. "
+            f"Поддерживаемые платформы из {path}: {supported_rendered}"
+        )
+    raise SetupError(
+        f"Skill does not support the current platform `{current_platform}`. "
+        f"Supported platforms declared in {path}: {supported_rendered}"
+    )
+
+
+def ensure_declared_dependencies(skill_dir: Path, locale_mode: str) -> None:
+    dependencies = load_declared_dependencies(skill_dir)
+    if not dependencies:
+        return
+
+    missing = [dependency for dependency in dependencies if shutil.which(dependency["command"]) is None]
+    if not missing:
+        return
+
+    locale = parse_locale_mode(locale_mode).primary_locale
+    lines: list[str]
+    if locale == "ru":
+        lines = [
+            f"Не установлены обязательные зависимости скилла из {skill_dir / DEPENDENCIES_RELATIVE_PATH}:"
+        ]
+        for dependency in missing:
+            lines.append(f"- {dependency['command']}: установите через `{dependency['install']}`")
+    else:
+        lines = [
+            f"Missing required skill dependencies declared in {skill_dir / DEPENDENCIES_RELATIVE_PATH}:"
+        ]
+        for dependency in missing:
+            lines.append(f"- {dependency['command']}: install with `{dependency['install']}`")
+    raise SetupError("\n".join(lines))
 
 
 def install_manifest_path(skill_dir: Path) -> Path:
@@ -444,6 +552,8 @@ def perform_install(
     runtime_dir = install_root / ".agents" / "skills" / skill_name
 
     locale_mode = resolve_locale_mode(install_mode, runtime_dir, requested_locale)
+    ensure_supported_platform(source_dir, locale_mode)
+    ensure_declared_dependencies(source_dir, locale_mode)
 
     sync_skill_copy(source_dir, runtime_dir)
     render_skill_metadata(runtime_dir, locale_mode, install_mode)

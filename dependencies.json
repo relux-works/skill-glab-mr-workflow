@@ -1,0 +1,15 @@
+{
+  "supported_platforms": [
+    "darwin"
+  ],
+  "dependencies": [
+    {
+      "command": "glab",
+      "install": "brew install glab"
+    },
+    {
+      "command": "direnv",
+      "install": "brew install direnv"
+    }
+  ]
+}

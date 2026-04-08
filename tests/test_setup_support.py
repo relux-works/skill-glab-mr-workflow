@@ -32,6 +32,21 @@ class SetupSupportTest(unittest.TestCase):
         (skill_dir / "tests").mkdir(parents=True, exist_ok=True)
 
         (skill_dir / "README.md").write_text("readme\n", encoding="utf-8")
+        (skill_dir / "dependencies.json").write_text(
+            json.dumps(
+                {
+                    "supported_platforms": ["darwin"],
+                    "dependencies": [
+                        {"command": "glab", "install": "brew install glab"},
+                        {"command": "direnv", "install": "brew install direnv"},
+                    ]
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
         (skill_dir / "Makefile").write_text(".PHONY: skill\nskill:\n\t@true\n", encoding="utf-8")
         (skill_dir / "agents" / "runtime.json").write_text(
             '{"commands": {"gmr": "scripts/gmr"}}\n',
@@ -164,7 +179,11 @@ class SetupSupportTest(unittest.TestCase):
         repo_root = self.root / "repo"
         repo_root.mkdir(parents=True, exist_ok=True)
 
-        with mock.patch.object(ss, "resolve_repo_root", return_value=repo_root.resolve()):
+        with mock.patch.object(ss, "resolve_repo_root", return_value=repo_root.resolve()), mock.patch.object(
+            ss.shutil,
+            "which",
+            return_value="/opt/homebrew/bin/present",
+        ):
             result = ss.perform_install(
                 source_dir=source_dir,
                 install_mode="local",
@@ -185,6 +204,62 @@ class SetupSupportTest(unittest.TestCase):
         self.assertEqual(manifest["schema_version"], 2)
         self.assertNotIn("source_dir", manifest)
         self.assertNotIn("runtime_dir", manifest)
+
+    def test_perform_local_install_fails_when_declared_dependencies_are_missing(self) -> None:
+        source_dir = self.make_source_skill_dir()
+        repo_root = self.root / "repo"
+        repo_root.mkdir(parents=True, exist_ok=True)
+
+        def fake_which(command: str) -> str | None:
+            if command == "glab":
+                return None
+            if command == "direnv":
+                return "/opt/homebrew/bin/direnv"
+            return None
+
+        with mock.patch.object(ss, "resolve_repo_root", return_value=repo_root.resolve()), mock.patch.object(
+            ss.shutil,
+            "which",
+            side_effect=fake_which,
+        ):
+            with self.assertRaises(ss.SetupError) as exc:
+                ss.perform_install(
+                    source_dir=source_dir,
+                    install_mode="local",
+                    requested_locale="ru",
+                    repo_root=repo_root,
+                )
+
+        self.assertIn("dependencies.json", str(exc.exception))
+        self.assertIn("glab", str(exc.exception))
+        self.assertIn("brew install glab", str(exc.exception))
+        self.assertFalse((repo_root / ".agents" / "skills" / "skill-glab-mr-workflow").exists())
+
+    def test_perform_local_install_fails_on_unsupported_platform(self) -> None:
+        source_dir = self.make_source_skill_dir()
+        repo_root = self.root / "repo"
+        repo_root.mkdir(parents=True, exist_ok=True)
+
+        with mock.patch.object(ss, "resolve_repo_root", return_value=repo_root.resolve()), mock.patch.object(
+            ss.platform,
+            "system",
+            return_value="Linux",
+        ), mock.patch.object(
+            ss.shutil,
+            "which",
+            return_value="/opt/homebrew/bin/present",
+        ):
+            with self.assertRaises(ss.SetupError) as exc:
+                ss.perform_install(
+                    source_dir=source_dir,
+                    install_mode="local",
+                    requested_locale="ru",
+                    repo_root=repo_root,
+                )
+
+        self.assertIn("linux", str(exc.exception).lower())
+        self.assertIn("dependencies.json", str(exc.exception))
+        self.assertFalse((repo_root / ".agents" / "skills" / "skill-glab-mr-workflow").exists())
 
     def test_render_skill_metadata_uses_markdown_triggers_as_single_source(self) -> None:
         source_dir = self.make_source_skill_dir()
