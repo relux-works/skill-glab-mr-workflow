@@ -3,9 +3,9 @@ set -euo pipefail
 
 usage() {
   cat >&2 <<'EOF'
-Usage: bootstrap-glab-keychain.sh <hostname-or-url>
+Usage: bootstrap-glab-auth.sh <hostname-or-url>
 
-Stores a GitLab PAT in macOS Keychain through glab's built-in keyring support.
+Stores a GitLab PAT in the OS keyring through glab's built-in keyring support.
 
 Optional environment variables:
   GITLAB_GIT_PROTOCOL   Defaults to: ssh

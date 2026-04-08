@@ -34,7 +34,7 @@ triggers:
 - Resolve command paths from this skill file path.
 - If the skill file path is `/abs/path/to/SKILL.md`, then:
   - `<gmr-command>` is `/abs/path/to/scripts/gmr`
-  - `<bootstrap-command>` is `/abs/path/to/scripts/bootstrap-glab-keychain.sh`
+  - `<bootstrap-command>` is `/abs/path/to/scripts/bootstrap-glab-auth.sh`
   - `<ensure-command>` is `/abs/path/to/scripts/ensure-glab-auth.sh`
 - Prefer those absolute command paths unless the repository bootstrap already provisioned `.agents/bin/gmr` through repo-level `make agents` and that repo-local bin layer is on `PATH`.
 - Bare `gmr` is acceptable only when it resolves through that repo-local `.agents/bin` layer.
@@ -411,7 +411,7 @@ Install:
 install glab and ensure it is available in PATH
 ```
 
-Bootstrap Keychain-backed auth:
+Bootstrap OS-keyring-backed auth:
 
 ```bash
 <bootstrap-command> https://gitlab.example.com/
@@ -426,7 +426,7 @@ glab auth status --hostname gitlab.example.com
 
 ## Safety Rules
 
-- Keep GitLab tokens in macOS Keychain through `glab auth login --use-keyring`.
+- Keep GitLab tokens in the OS keyring through `glab auth login --use-keyring`.
 - Do not save GitLab tokens in shell history, env files, or checked-in files.
 - Do not use `glab auth status --show-token` unless the user explicitly asks to reveal the token.
 - Prefer full MR URLs because they remove host and repo ambiguity.

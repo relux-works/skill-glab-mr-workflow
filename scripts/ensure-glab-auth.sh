@@ -48,5 +48,5 @@ if glab auth status --hostname "$hostname" >/dev/null 2>&1; then
 fi
 
 printf 'glab authentication is missing for %s.\n' "$hostname" >&2
-printf 'Bootstrap it with: scripts/bootstrap-glab-keychain.sh %s\n' "$hostname" >&2
+printf 'Bootstrap it with: scripts/bootstrap-glab-auth.sh %s\n' "$hostname" >&2
 exit 1

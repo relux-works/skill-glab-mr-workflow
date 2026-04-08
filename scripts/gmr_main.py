@@ -11,6 +11,11 @@ import urllib.parse
 from pathlib import Path
 from typing import Any
 
+# CLI/API split is deliberate:
+# - Read operations (get_mr, pipelines, jobs, traces, discussions) use `glab api`
+#   for structured JSON responses with explicit hostname control.
+# - Write and list operations (mr list, create, approve, merge) use `glab mr` CLI
+#   subcommands for built-in repo resolution, flag composition, and auth handling.
 
 ANSI_ESCAPE_RE = re.compile(r"\x1B\[[0-?]*[ -/]*[@-~]")
 MR_URL_RE = re.compile(
@@ -483,6 +488,10 @@ def merge_request_matches_user_filter(mr: dict[str, Any], field: str, candidates
     raise ValueError(f"Unsupported user filter field: {field}")
 
 
+# glab CLI server-side filtering by author/assignee/reviewer matches inconsistently
+# across GitLab versions and self-hosted instances (display name vs username).
+# Post-filter ensures consistent matching against all resolved username candidates,
+# including @me/mine aliases that expand to multiple candidate strings.
 def post_filter_merge_requests(
     merge_requests: list[dict[str, Any]],
     *,
@@ -730,7 +739,7 @@ def command_auth_ensure_mr(args: argparse.Namespace) -> None:
 def command_auth_bootstrap(args: argparse.Namespace) -> None:
     scripts_dir = Path(__file__).resolve().parent
     subprocess.run(
-        [str(scripts_dir / "bootstrap-glab-keychain.sh"), args.target],
+        [str(scripts_dir / "bootstrap-glab-auth.sh"), args.target],
         check=True,
     )
 

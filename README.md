@@ -29,7 +29,7 @@ GitLab merge request workflow skill for Codex and Claude Code, built around the 
 - `scripts/bootstrap.sh`: skill-local bootstrap entrypoint for committed runtime copies
 - `scripts/make-agents.sh`: `make agents` hook entrypoint for repo-level `check`/`setup` phases
 - `scripts/gmr`: high-level MR workflow wrapper
-- `scripts/bootstrap-glab-keychain.sh`: initial auth bootstrap
+- `scripts/bootstrap-glab-auth.sh`: initial auth bootstrap
 - `scripts/ensure-glab-auth.sh`: auth preflight
 - `references/`: compact command and review references
 - `tests/`: unit tests for the wrapper logic
@@ -67,7 +67,7 @@ In other words:
 ## Quick Start
 
 ```bash
-scripts/bootstrap-glab-keychain.sh https://gitlab.example.com/
+scripts/bootstrap-glab-auth.sh https://gitlab.example.com/
 scripts/gmr mr status https://gitlab.example.com/group/project/-/merge_requests/123
 scripts/gmr mr review-context https://gitlab.example.com/group/project/-/merge_requests/123
 scripts/gmr mr list --repo group/project --hostname gitlab.example.com --mine
