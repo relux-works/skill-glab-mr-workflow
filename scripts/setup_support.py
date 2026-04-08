@@ -463,7 +463,13 @@ def resolve_repo_root(path: Path) -> Path:
     return Path(completed.stdout.strip()).resolve()
 
 
-def resolve_locale_mode(install_mode: str, runtime_dir: Path, requested_locale: Optional[str]) -> str:
+def resolve_locale_mode(
+    install_mode: str,
+    runtime_dir: Path,
+    requested_locale: Optional[str],
+    *,
+    force_locale: bool = False,
+) -> str:
     manifest = load_install_manifest(runtime_dir)
     existing_locale = manifest.get("locale_mode") if manifest else None
     if existing_locale is not None and not isinstance(existing_locale, str):
@@ -471,10 +477,11 @@ def resolve_locale_mode(install_mode: str, runtime_dir: Path, requested_locale: 
 
     if requested_locale:
         requested_mode = parse_locale_mode(requested_locale).mode
-        if install_mode == "local" and existing_locale and existing_locale != requested_mode:
+        if install_mode == "local" and existing_locale and existing_locale != requested_mode and not force_locale:
             raise SetupError(
                 "Local install locale is project-fixed after the first install. "
-                f"Expected {existing_locale}, got {requested_mode}."
+                f"Expected {existing_locale}, got {requested_mode}. "
+                "Use --force-locale to override."
             )
         return requested_mode
 
@@ -491,6 +498,7 @@ def perform_install(
     install_mode: str,
     requested_locale: Optional[str],
     repo_root: Optional[Path] = None,
+    force_locale: bool = False,
 ) -> InstallResult:
     source_dir = resolve_source_dir(source_dir).resolve()
     skill_name = source_dir.name
@@ -503,7 +511,7 @@ def perform_install(
     install_root = resolve_repo_root(repo_root)
     runtime_dir = install_root / ".agents" / "skills" / skill_name
 
-    locale_mode = resolve_locale_mode(install_mode, runtime_dir, requested_locale)
+    locale_mode = resolve_locale_mode(install_mode, runtime_dir, requested_locale, force_locale=force_locale)
     ensure_declared_dependencies(source_dir, locale_mode)
 
     sync_skill_copy(source_dir, runtime_dir)

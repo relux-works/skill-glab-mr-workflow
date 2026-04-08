@@ -172,8 +172,36 @@ class SetupSupportTest(unittest.TestCase):
             (repo_root / ".agents" / "skills" / "skill-glab-mr-workflow").resolve(),
         )
         self.assertIn("project-fixed", str(exc.exception))
+        self.assertIn("--force-locale", str(exc.exception))
         self.assertFalse((repo_root / ".claude" / "skills" / "skill-glab-mr-workflow").exists())
         self.assertFalse((repo_root / ".codex" / "skills" / "skill-glab-mr-workflow").exists())
+
+    def test_perform_local_install_force_locale_overrides_locked_locale(self) -> None:
+        source_dir = self.make_source_skill_dir()
+        repo_root = self.root / "repo"
+        repo_root.mkdir(parents=True, exist_ok=True)
+
+        with mock.patch.object(ss, "resolve_repo_root", return_value=repo_root.resolve()), mock.patch.object(
+            ss.shutil,
+            "which",
+            return_value="/opt/homebrew/bin/present",
+        ):
+            ss.perform_install(
+                source_dir=source_dir,
+                install_mode="local",
+                requested_locale="ru",
+                repo_root=repo_root,
+            )
+            result = ss.perform_install(
+                source_dir=source_dir,
+                install_mode="local",
+                requested_locale="en",
+                repo_root=repo_root,
+                force_locale=True,
+            )
+
+        manifest = ss.load_install_manifest(result.runtime_dir)
+        self.assertEqual(manifest["locale_mode"], "en")
 
     def test_perform_local_install_creates_committed_safe_runtime_copy(self) -> None:
         source_dir = self.make_source_skill_dir()

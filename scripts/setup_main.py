@@ -24,6 +24,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("repo_path", help="Path to the git repository root or any path inside that repository")
     parser.add_argument("--locale", help=locale_help)
+    parser.add_argument("--force-locale", action="store_true", help="Override the previously locked locale on reinstall")
     return parser
 
 def main(argv: list[str] | None = None) -> None:
@@ -37,6 +38,7 @@ def main(argv: list[str] | None = None) -> None:
             install_mode="local",
             requested_locale=args.locale,
             repo_root=Path(args.repo_path).expanduser(),
+            force_locale=args.force_locale,
         )
     except SetupError as exc:
         print(str(exc), file=sys.stderr)
